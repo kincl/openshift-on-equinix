@@ -1,0 +1,25 @@
+metal virtual-network create -m da --vxlan 100 -d cluster
+metal ip request -t public_ipv4 -q 16 -m da
+metal gateway create -v 89c3b20f-9c00-4de2-b0c1-3d8e292cdd09 -r 4f1ed9b6-7855-4f5a-8a04-d0028ba6a6d3
+metal device create -m da -P m3.small.x86 -H bastion -O rhel_9
+
+metal device create \
+--hostname node1 \
+--plan c3.medium.x86 \
+--metro da \
+--operating-system custom_ipxe \
+--userdata='#!ipxe
+:loop
+sleep 10
+echo Trying to contact bastion
+chain http://147.75.45.50/bootstrap.cfg || goto loop
+EOT'
+
+metal port convert -b -2 -f -i 7dcaae00-53ee-4cc6-8f81-54b9461b9d7b
+metal port vlan -i 7dcaae00-53ee-4cc6-8f81-54b9461b9d7b -a 100
+
+
+## Issues
+- cant use the cli to create a device in l2 bonded mode
+- cant reinstall a m3.small.x86 rhel_9 device?
+

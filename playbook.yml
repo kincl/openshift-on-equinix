@@ -1,0 +1,48 @@
+---
+- name: Prep Infrastructure
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars_files:
+  - playbook-vars.yml
+  - secrets.yml
+  tasks:
+
+    - name: include infra
+      import_tasks: playbook-infra.yml
+      tags:
+        infra
+
+    - ansible.builtin.set_fact:
+        devices: []
+        network: "{{ ip_reservation.network }}"
+        gateway_ip: "{{ ip_reservation.network | ansible.utils.ipmath(1) }}"
+        bastion_ip: "{{ ip_reservation.network | ansible.utils.ipmath(2) }}"
+        api_vip: "{{ ip_reservation.network | ansible.utils.ipmath(3) }}"
+        ingress_vip: "{{ ip_reservation.network | ansible.utils.ipmath(4) }}"
+        rendezvous_ip: "{{ ip_reservation.network | ansible.utils.ipmath(5) }}"
+      tags:
+        test_devices
+        ip_reservation
+
+    - name: include bastion
+      import_tasks: playbook-bastion.yml
+      tags:
+        bastion
+
+    - name: include node
+      include_tasks: playbook-node.yml
+      loop: "{{ range(1, 4) | list }}"
+      tags:
+        test_devices
+
+    # todo do dns
+
+- name: Install
+  hosts: bastion
+  gather_facts: false
+  become: true
+  vars_files:
+  - playbook-vars.yml
+  tasks:
+    - import_tasks: playbook-cluster.yml

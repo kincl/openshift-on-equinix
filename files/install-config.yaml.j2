@@ -1,0 +1,31 @@
+---
+apiVersion: v1
+baseDomain: {{ base_domain | to_json }}
+compute:
+- name: worker 
+  replicas: {{ worker_count | int }}
+controlPlane:
+  name: master
+  replicas: {{ master_count | int }}
+metadata:
+  name: {{ cluster_name | to_json }}
+networking:
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineCIDR: {{ hostvars['localhost']['network'] }}/{{ prefix }}
+  serviceNetwork:
+  - 172.30.0.0/16
+  networkType: OVNKubernetes
+platform:
+  baremetal:
+    apiVIPs:
+    - {{ hostvars['localhost']['api_vip'] | to_json }}
+    ingressVIPs: 
+    - {{ hostvars['localhost']['ingress_vip'] | to_json }}
+{# pull_secret may be either a dict (mapping) or a JSON string.       #}
+{# The install-config.yaml needs an quoted JSON string for the pullSecret. #}
+{# Passing a json string through to_json gives us the quoted string.       #}
+{# To get to the quoted JSON string from a mapping we call to_json twice.  #}
+pullSecret: {{ pull_secret | to_json | to_json if pull_secret is mapping else pull_secret | to_json }}
+sshKey: {{ idrsapub.content | b64decode | trim | to_json }}

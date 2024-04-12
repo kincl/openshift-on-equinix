@@ -1,0 +1,86 @@
+
+- debug:
+    msg: "Start node{{ item }}"
+
+- ansible.builtin.set_fact:
+    node_ip: "{{ ip_reservation.network | ansible.utils.ipmath(item + 4) }}"
+    node_hostname: "node{{item}}"
+    device: "{{ none }}"
+  tags:
+    ip_reservation
+
+- name: find node if it exists
+  equinix.cloud.metal_device_info:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    hostname: "{{ node_hostname }}"
+  register: t_device
+  tags:
+    test_devices
+
+- name: set device
+  when: t_device.resources is defined and (t_device.resources | length != 0)
+  ansible.builtin.set_fact:
+    device: "{{ t_device.resources[0] }}"
+  tags:
+    test_devices
+
+- name: create node
+  when: device is not defined or device is not none
+  equinix.cloud.metal_device:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    state: present
+    hostname: "{{ node_hostname }}"
+    billing_cycle: hourly
+    metro: da
+    plan: c3.medium.x86
+    operating_system: custom_ipxe
+    userdata: |
+      #!ipxe
+      :loop
+      sleep 10
+      echo Trying to contact bastion
+      chain http://{{ bastion_ip }}/agent.x86_64.ipxe || goto loop
+      EOT
+  register: t_device
+
+- name: set device
+  when: device is not defined or device is not none
+  ansible.builtin.set_fact:
+    device: "{{ t_device }}"
+
+- name: get full device object
+  ansible.builtin.uri:
+    url: "https://api.equinix.com/metal/v1/devices/{{ device.id }}"
+    headers:
+      X-Auth-Token: "{{ auth_token }}"
+  register: t_device_full
+
+- name: set device
+  ansible.builtin.set_fact:
+    device: "{{ t_device_full.json }}"
+    node_mac: "{{ t_device_full.json.network_ports[0].data.mac }}"
+
+# https://github.com/equinix-labs/ansible-collection-equinix/issues/61
+- name: set vlan on port
+  ansible.builtin.uri:
+    method: POST
+    url: "https://api.equinix.com/metal/v1/ports/{{ device.network_ports[0].bond.id }}/vlan-assignments/batches"
+    headers:
+      X-Auth-Token: "{{ auth_token }}"
+    body_format: json
+    body: '{"vlan_assignments": [{"vlan": "100", "state": "assigned"}]}'
+    status_code: 201
+
+# - name: get port
+#   ansible.builtin.uri:
+#     url: "https://api.equinix.com/metal/v1/ports/{{ device.network_ports[0].bond.id }}"
+#     headers:
+#       X-Auth-Token: "{{ auth_token }}"
+
+- name: append to devices
+  ansible.builtin.set_fact:
+    devices: "{{ devices + [{\"ip\": node_ip, \"mac\": node_mac, \"hostname\": node_hostname}] }}"
+  tags:
+    test_devices

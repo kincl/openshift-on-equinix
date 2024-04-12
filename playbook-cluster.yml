@@ -1,0 +1,108 @@
+---
+- debug:
+    msg: "Start cluster install"
+
+- name: install deps
+  dnf:
+    name: "{{ item }}"
+    state: present
+    with_items:
+    - nmstate
+#     - httpd
+
+# - name: ensure httpd is running
+#   ansible.builtin.systemd_service:
+#     state: started
+#     name: httpd
+
+- name: Set URLs for OpenShift GA releases
+  set_fact:
+    ocp4_installer_url: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.15/openshift-install-linux.tar.gz
+    ocp4_client_url: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.15/openshift-client-linux.tar.gz
+
+- name: Get the OpenShift Installer
+  become: true
+  unarchive:
+    src: "{{ ocp4_installer_url}} "
+    remote_src: true
+    dest: /usr/bin
+    mode: 0755
+    owner: root
+    group: root
+  register: r_installer
+  until: r_installer is success
+  retries: 10
+  delay: 10
+
+- name: Get the OpenShift CLI
+  become: true
+  unarchive:
+    src: "{{ ocp4_client_url }}"
+    remote_src: true
+    dest: /usr/bin
+    mode: 0775
+    owner: root
+    group: root
+  retries: 10
+  register: r_client
+  until: r_client is success
+  delay: 10
+
+- name: Generate SSH keys
+  shell: ssh-keygen -b 2048 -t rsa -f ~/.ssh/id_rsa -q -N ""
+  args:
+    creates: ~/.ssh/id_rsa
+
+- name: Generate SSH pub key
+  shell: ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+  args:
+    creates: ~/.ssh/id_rsa.pub
+
+- name: Slurp public key
+  slurp:
+    path: /root/.ssh/id_rsa.pub
+  register: idrsapub
+
+- name: Create cluster directory
+  file:
+    path: /root/{{ cluster_name }}
+    state: directory
+
+- name: Generate config install-config.yaml
+  template:
+    src: files/install-config.yaml.j2
+    dest: /root/{{ cluster_name }}/install-config.yaml
+
+- name: Make a copy of the cluster install config
+  copy:
+    remote_src: true
+    src: /root/{{ cluster_name }}/install-config.yaml
+    dest: /root/{{ cluster_name }}/install-config.yaml.bak
+
+- name: Generate config agent-config.yaml
+  template:
+    src: files/agent-config.yaml.j2
+    dest: /root/{{ cluster_name }}/agent-config.yaml
+
+- name: Make a copy of the cluster agent config
+  copy:
+    remote_src: true
+    src: /root/{{ cluster_name }}/agent-config.yaml
+    dest: /root/{{ cluster_name }}/agent-config.yaml.bak
+
+- name: Run the installer
+  tags:
+  - run_installer
+  command: openshift-install agent create pxe-files --dir=/root/{{ cluster_name }}
+  # async: "{{ 2 * 60 * 60 }}"
+  # register: r_openshift_install
+  # until: r_openshift_install.rc == 0
+  # delay: 10
+  # retries: 2
+
+- name: add serial connectivity
+  lineinfile:
+    path: "/root/{{ cluster_name }}/boot-artifacts/agent.x86_64.ipxe"
+    backrefs: yes
+    regexp: "^(kernel .*)$"
+    line: '\1 console=tty0 console=ttyS1,115200n8'

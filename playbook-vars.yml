@@ -1,0 +1,14 @@
+---
+# install-config
+cluster_name: test
+base_domain: equinix.kincl.dev
+master_count: 3
+worker_count: 0
+
+# agent-config
+ip_reservation_quantity: 16
+prefix: 28
+
+dns_servers:
+- 147.75.207.207
+- 147.75.207.208

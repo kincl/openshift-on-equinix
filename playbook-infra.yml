@@ -1,0 +1,85 @@
+
+# TODO create vlan if necessary
+- name: find vlan if it exists
+  equinix.cloud.metal_vlan_info:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+  register: t_vlan
+  tags:
+    vlan
+
+- name: set vlan
+  when: t_vlan.resources is defined and (t_vlan.resources | length != 0)
+  ansible.builtin.set_fact:
+    vlan: "{{ t_vlan.resources[0] }}"
+  tags:
+    vlan
+
+- name: find ip block if it exists
+  equinix.cloud.metal_reserved_ip_block_info:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    type: public_ipv4
+    metro: da
+  register: t_ip_reservation
+  tags:
+    ip_reservation
+
+- name: set ip_reservation
+  when: t_ip_reservation.resources is defined and (t_ip_reservation.resources | length != 0)
+  ansible.builtin.set_fact:
+    ip_reservation: "{{ t_ip_reservation.resources[0] }}"
+  tags:
+    ip_reservation
+
+- name: create ip reservation
+  when: ip_reservation is not defined
+  equinix.cloud.metal_reserved_ip_block:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    type: public_ipv4
+    metro: da
+    quantity: "{{ ip_reservation_quantity }}"
+  register: t_ip_reservation
+  tags:
+    ip_reservation
+
+- name: set ip_reservation
+  when: ip_reservation is not defined
+  ansible.builtin.set_fact:
+    ip_reservation: "{{ t_ip_reservation }}"
+  tags:
+    ip_reservation
+
+- name: find gateway if it exists
+  equinix.cloud.metal_gateway_info:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+  register: t_gateway
+  tags:
+    gateway
+
+- name: set gateway
+  when: t_gateway.resources is defined and (t_gateway.resources | length != 0)
+  ansible.builtin.set_fact:
+    gateway: "{{ t_gateway.resources[0] }}"
+  tags:
+    gateway
+
+- name: create gateway
+  when: gateway is not defined
+  equinix.cloud.metal_gateway:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    ip_reservation_id: "{{ ip_reservation.id }}"
+    virtual_network_id: "{{ vlan.id }}"
+  register: t_gateway
+  tags:
+    gateway
+
+- name: set gateway
+  when: gateway is not defined
+  ansible.builtin.set_fact:
+    gateway: "{{ t_gateway }}"
+  tags:
+    gateway

@@ -1,0 +1,53 @@
+apiVersion: v1beta1
+kind: AgentConfig
+metadata:
+  name: {{ cluster_name | to_json }}
+rendezvousIP: {{ hostvars['localhost']['rendezvous_ip'] | to_json }}
+bootArtifactsBaseURL: http://{{ hostvars['localhost']['bastion_ip'] }}
+hosts:
+{% for host in hostvars['localhost']['devices'] %}
+- hostname: {{ host.hostname }}
+  rootDeviceHints:
+    minSizeGigabytes: 400
+  interfaces:
+    - name: ens3f0
+      macAddress: {{ host.mac }}
+  networkConfig: 
+    interfaces:
+      - name: bond0.100 
+        type: vlan 
+        state: up
+        vlan:
+          base-iface: bond0
+          id: 100
+        ipv4:
+          enabled: true
+          address:
+            - ip: {{ host.ip }}
+              prefix-length: {{ prefix }}
+          dhcp: false
+      - name: bond0 
+        type: bond 
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: 802.3ad
+          options:
+            miimon: "100" 
+            xmit_hash_policy: layer3+4
+          port:
+            - ens3f0
+            - ens3f1
+    dns-resolver:
+      config:
+        server: {{ dns_servers | to_json }}
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ hostvars['localhost']['gateway_ip'] }}
+          next-hop-interface: bond0.100
+          table-id: 254
+{% endfor %}

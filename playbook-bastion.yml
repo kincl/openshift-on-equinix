@@ -1,0 +1,72 @@
+---
+- debug:
+    msg: "Start bastion"
+
+- name: find bastion if it exists
+  equinix.cloud.metal_device_info:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    hostname: bastion
+  register: t_device
+
+- name: set device
+  when: t_device.resources is defined and (t_device.resources | length != 0)
+  ansible.builtin.set_fact:
+    device: "{{ t_device.resources[0] }}"
+
+- name: create bastion
+  when: device is not defined
+  equinix.cloud.metal_device:
+    metal_api_token: "{{ auth_token }}"
+    project_id: "{{ project_id }}"
+    state: present
+    hostname: bastion
+    billing_cycle: hourly
+    metro: da
+    plan: m3.small.x86
+    operating_system: rhel_9
+    userdata: |
+      #!/bin/sh
+      nmcli c modify bond0 ipv6.addresses "" ipv6.gateway "" ipv6.method disabled
+      nmcli c modify bond0 ipv4.addresses "" ipv4.gateway "" ipv4.dns "" ipv4.method disabled
+      nmcli c add connection.type vlan connection.id bond0.100 dev bond0 id 100 ipv4.method manual ipv4.addresses {{ bastion_ip }}/28 ipv4.gateway {{ gateway_ip }} ipv4.dns "147.75.207.207,147.75.207.208"
+
+      nmcli c down bond0
+      nmcli c up bond0.100
+  register: t_device
+
+# TODO: assign the ip from the block to this node
+
+- name: set device
+  when: device is not defined
+  ansible.builtin.set_fact:
+    device: "{{ t_device }}"
+
+- name: get full device object
+  ansible.builtin.uri:
+    url: "https://api.equinix.com/metal/v1/devices/{{ device.id }}"
+    headers:
+      X-Auth-Token: "{{ auth_token }}"
+  register: t_device_full
+
+- name: set device
+  ansible.builtin.set_fact:
+    device: "{{ t_device_full.json }}"
+
+# https://github.com/equinix-labs/ansible-collection-equinix/issues/61
+- name: set vlan on port
+  ansible.builtin.uri:
+    method: POST
+    url: "https://api.equinix.com/metal/v1/ports/{{ device.network_ports[0].bond.id }}/vlan-assignments/batches"
+    headers:
+      X-Auth-Token: "{{ auth_token }}"
+    body_format: json
+    body: '{"vlan_assignments": [{"vlan": "100", "state": "assigned"}]}'
+    status_code: 201
+
+- name: add bastion to inventory
+  ansible.builtin.add_host:
+    name: "{{ bastion_ip }}"
+    ansible_user: root
+    groups:
+      - bastion
