@@ -4,12 +4,12 @@
   gather_facts: false
   become: false
   vars_files:
-  - playbook-vars.yml
+  - vars.yml
   - secrets.yml
   tasks:
 
     - name: include infra
-      import_tasks: playbook-infra.yml
+      import_tasks: tasks-infra.yml
       tags:
         infra
 
@@ -26,12 +26,12 @@
         ip_reservation
 
     - name: include bastion
-      import_tasks: playbook-bastion.yml
+      import_tasks: tasks-bastion.yml
       tags:
         bastion
 
     - name: include node
-      include_tasks: playbook-node.yml
+      include_tasks: tasks-node.yml
       loop: "{{ range(1, 4) | list }}"
       tags:
         test_devices
@@ -43,6 +43,6 @@
   gather_facts: false
   become: true
   vars_files:
-  - playbook-vars.yml
+  - vars.yml
   tasks:
-    - import_tasks: playbook-cluster.yml
+    - import_tasks: tasks-cluster.yml
