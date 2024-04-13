@@ -1,7 +1,7 @@
 ---
 # install-config
 cluster_name: test
-base_domain: equinix.kincl.dev
+base_domain: example.com
 master_count: 3
 worker_count: 0
 
